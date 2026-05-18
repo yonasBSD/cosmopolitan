@@ -35,6 +35,25 @@
 __static_yoink("openbsd_sorting_notice");
 // clang-format off
 
+// This implementation uses the Quicksort routine from Bentley &
+// McIlroy's "Engineering a Sort Function", 1992, Bell Labs.
+//
+// This version differs from Bentley & McIlroy in the following ways:
+//
+// 1. The partition value is swapped into a[0] instead of being stored
+//    out of line.
+//
+// 2. The swap function can swap 32-bit aligned elements on 64-bit
+//    platforms instead of swapping them as byte-aligned.
+//
+// 3. It uses David Musser's introsort algorithm to fall back to
+//    heapsort(3) when the recursion depth reaches 2*lg(n + 1). This
+//    avoids quicksort's quadratic behavior for pathological input
+//    without appreciably changing the average run time.
+//
+// 4. Tail recursion is eliminated when sorting the larger of two
+//    subpartitions to save stack space.
+
 #define SWAPTYPE_BYTEV	1
 #define SWAPTYPE_INTV	2
 #define SWAPTYPE_LONGV	3
@@ -241,29 +260,22 @@ qsort_r(void *a, size_t n, size_t es,
 /**
  * Sorts array.
  *
- * This implementation uses the Quicksort routine from Bentley &
- * McIlroy's "Engineering a Sort Function", 1992, Bell Labs.
- *
- * This version differs from Bentley & McIlroy in the following ways:
- * 
- * 1. The partition value is swapped into a[0] instead of being stored
- *    out of line.
- *
- * 2. The swap function can swap 32-bit aligned elements on 64-bit
- *    platforms instead of swapping them as byte-aligned.
- *
- * 3. It uses David Musser's introsort algorithm to fall back to
- *    heapsort(3) when the recursion depth reaches 2*lg(n + 1). This
- *    avoids quicksort's quadratic behavior for pathological input
- *    without appreciably changing the average run time.
- *
- * 4. Tail recursion is eliminated when sorting the larger of two
- *    subpartitions to save stack space.
+ * This is your go-to general-purpose sorting algorithm. It uses
+ * introsort. That means it's just quicksort, except if the input is
+ * exhibiting quadratic behavior, then it switches to heapsort. Since
+ * heapsort needs malloc(), this function isn't safe to call from signal
+ * handlers. In the event that malloc fails, then this function will
+ * simply just keep doing quicksort. Therefore if you're sorting
+ * untrusted data from a security constrained environment that doesn't
+ * have access to mmap() (e.g. pledge()) then you need to be prepared
+ * for sorting taking a long time (see setrlimit() with RLIMIT_CPU), or
+ * you can use smoothsort() instead, which will likely go slower.
  *
  * @param a is base of array
  * @param n is item count
  * @param es is item width
- * @param cmp is a callback returning <0, 0, or >0
+ * @param cmp is a callback returning <0, 0, or >0 which must impose a
+ *     strict weak ordering and behave as a pure function of its args
  * @see mergesort()
  * @see heapsort()
  * @see qsort_r()

@@ -91,6 +91,30 @@ int CompareLong(const void *a, const void *b) {
   return 0;
 }
 
+struct Int40 {
+  uint8_t b[5];
+};
+
+static uint64_t LoadInt40(const struct Int40 *v) {
+  uint64_t x = 0;
+  memcpy(&x, v->b, 5);
+  return x;
+}
+
+static void StoreInt40(struct Int40 *v, uint64_t x) {
+  memcpy(v->b, &x, 5);
+}
+
+int CompareInt40(const void *a, const void *b) {
+  uint64_t x = LoadInt40(a);
+  uint64_t y = LoadInt40(b);
+  if (x < y)
+    return -1;
+  if (x > y)
+    return +1;
+  return 0;
+}
+
 TEST(qsort, words) {
   const int32_t A[][2] = {{4, 'a'},   {65, 'b'}, {2, 'c'}, {-31, 'd'},
                           {0, 'e'},   {99, 'f'}, {2, 'g'}, {83, 'h'},
@@ -182,6 +206,44 @@ TEST(qsort, equivalence_reverse) {
   ASSERT_EQ(0, memcmp(b, c, n * sizeof(long)));
 }
 
+TEST(qsort, int40_equivalence_random) {
+  size_t i, n = 1000;
+  _Static_assert(sizeof(struct Int40) == 5, "");
+  struct Int40 *a = gc(malloc(n * sizeof(struct Int40)));
+  struct Int40 *b = gc(malloc(n * sizeof(struct Int40)));
+  struct Int40 *c = gc(malloc(n * sizeof(struct Int40)));
+  arc4random_buf(a, n * sizeof(struct Int40));
+  memcpy(b, a, n * sizeof(struct Int40));
+  memcpy(c, a, n * sizeof(struct Int40));
+  qsort(b, n, sizeof(struct Int40), CompareInt40);
+  mergesort(c, n, sizeof(struct Int40), CompareInt40);
+  ASSERT_EQ(0, memcmp(b, c, n * sizeof(struct Int40)));
+  memcpy(c, a, n * sizeof(struct Int40));
+  heapsort(c, n, sizeof(struct Int40), CompareInt40);
+  ASSERT_EQ(0, memcmp(b, c, n * sizeof(struct Int40)));
+  memcpy(c, a, n * sizeof(struct Int40));
+  smoothsort(c, n, sizeof(struct Int40), CompareInt40);
+  ASSERT_EQ(0, memcmp(b, c, n * sizeof(struct Int40)));
+  for (i = 1; i < n; ++i)
+    ASSERT_LE(LoadInt40(&b[i - 1]), LoadInt40(&b[i]));
+}
+
+TEST(qsort, int40_equivalence_reverse) {
+  size_t i, n = 1000;
+  struct Int40 *a = gc(malloc(n * sizeof(struct Int40)));
+  struct Int40 *b = gc(malloc(n * sizeof(struct Int40)));
+  struct Int40 *c = gc(malloc(n * sizeof(struct Int40)));
+  for (i = 0; i < n; ++i)
+    StoreInt40(&a[n - i - 1], i);
+  memcpy(b, a, n * sizeof(struct Int40));
+  memcpy(c, a, n * sizeof(struct Int40));
+  qsort(b, n, sizeof(struct Int40), CompareInt40);
+  mergesort(c, n, sizeof(struct Int40), CompareInt40);
+  ASSERT_EQ(0, memcmp(b, c, n * sizeof(struct Int40)));
+  for (i = 0; i < n; ++i)
+    ASSERT_EQ(i, LoadInt40(&b[i]));
+}
+
 BENCH(qsort, bench) {
   size_t i;
   size_t n = 1000;
@@ -251,4 +313,49 @@ BENCH(qsort, bench) {
   EZBENCH2("smoothsort 2n", memcpy(p2, p1, n * sizeof(long)),
            smoothsort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("_longsort 2n", memcpy(p2, p1, n * sizeof(long)), _longsort(p2, n));
+}
+
+// 5-byte elements exercise qsort's byte-wise swap path (SWAPTYPE_BYTEV)
+// because the element size is not a multiple of sizeof(int) or
+// sizeof(long), unlike the 4- and 8-byte fast paths.
+BENCH(qsort, bench_int40) {
+  size_t i;
+  size_t n = 1000;
+  struct Int40 *p1 = gc(malloc(n * sizeof(struct Int40)));
+  struct Int40 *p2 = gc(malloc(n * sizeof(struct Int40)));
+
+  printf("\n");
+  for (i = 0; i < n; ++i)
+    StoreInt40(&p1[i], i + ((lemur64() % 3) - 1));
+  EZBENCH2("qsort40 nearly", memcpy(p2, p1, n * sizeof(struct Int40)),
+           qsort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("heapsort40 nearly", memcpy(p2, p1, n * sizeof(struct Int40)),
+           heapsort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("mergesort40 nearly", memcpy(p2, p1, n * sizeof(struct Int40)),
+           mergesort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("smoothsort40 nearly", memcpy(p2, p1, n * sizeof(struct Int40)),
+           smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
+
+  printf("\n");
+  for (i = 0; i < n; ++i)
+    StoreInt40(&p1[i], n - i);
+  EZBENCH2("qsort40 reverse", memcpy(p2, p1, n * sizeof(struct Int40)),
+           qsort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("heapsort40 reverse", memcpy(p2, p1, n * sizeof(struct Int40)),
+           heapsort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("mergesort40 reverse", memcpy(p2, p1, n * sizeof(struct Int40)),
+           mergesort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("smoothsort40 reverse", memcpy(p2, p1, n * sizeof(struct Int40)),
+           smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
+
+  printf("\n");
+  arc4random_buf(p1, n * sizeof(struct Int40));
+  EZBENCH2("qsort40 random", memcpy(p2, p1, n * sizeof(struct Int40)),
+           qsort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("heapsort40 random", memcpy(p2, p1, n * sizeof(struct Int40)),
+           heapsort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("mergesort40 random", memcpy(p2, p1, n * sizeof(struct Int40)),
+           mergesort(p2, n, sizeof(struct Int40), CompareInt40));
+  EZBENCH2("smoothsort40 random", memcpy(p2, p1, n * sizeof(struct Int40)),
+           smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
 }
