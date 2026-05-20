@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,53 +16,45 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/errno.h"
+#include "libc/intrin/atomic.h"
+#include "libc/thread/lock.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/threads.h"
+#include "third_party/nsync/mu.h"
+
+dontinline static int mtx_unlock_recursive(mtx_t *mtx, uint64_t word) {
+  while (MUTEX_DEPTH(word)) {
+    if (atomic_compare_exchange_weak_explicit(
+            &mtx->_word, &word, MUTEX_DEC_DEPTH(word), memory_order_relaxed,
+            memory_order_relaxed))
+      return thrd_success;
+  }
+  atomic_store_explicit(&mtx->_word, MUTEX_UNLOCK(word), memory_order_relaxed);
+  nsync_mu_unlock((nsync_mu *)mtx);
+  return thrd_success;
+}
 
 /**
- * Creates new thread.
+ * Unlocks mutex.
  *
- * The new thread begins by calling `func(arg)`. Unlike a pthread start
- * routine, which returns `void *`, a C11 thread function returns `int`;
- * that value becomes the thread's result code, retrievable via
- * thrd_join(), e.g.
+ * This releases `mtx`, which the calling thread must currently hold,
+ * and wakes a waiting thread if any. Unlocking a mutex you don't own,
+ * or one that isn't locked, is undefined behavior. For `mtx_recursive`
+ * mutices this drops one level of ownership; the mutex only becomes
+ * free once it's been unlocked as many times as it was locked.
  *
- *     int worker(void *arg) {
- *       return 42;
- *     }
- *     thrd_t th;
- *     if (thrd_create(&th, worker, 0) != thrd_success)
- *       abort();
- *     int res;
- *     thrd_join(th, &res);  // res == 42
+ * This API is part of the C11 standard and behaves like
+ * pthread_mutex_unlock().
  *
- * The thread runs until `func` returns, thrd_exit() is called, or the
- * process exits. Each created thread must eventually be passed to
- * either thrd_join() or thrd_detach() exactly once, otherwise its
- * resources leak until exit.
- *
- * This is created with cosmopolitan's default thread attributes; for
- * control over stack size, scheduling, etc. use pthread_create(), with
- * which this is otherwise interchangeable (a `thrd_t` is a
- * `pthread_t`).
- *
- * This API is part of the C11 standard.
- *
- * @param thr is output parameter for the new thread's handle
- * @param func is start routine, whose `int` return is thread result
- * @param arg is an opaque value passed through to `func`
- * @return `thrd_success` on success, `thrd_nomem` if memory was
- *     exhausted or we ran out of processes, otherwise `thrd_error`
- * @see thrd_join(), thrd_detach(), thrd_exit(), pthread_create()
+ * @param mtx must already be locked by calling thread
+ * @return `thrd_success` on success
+ * @see mtx_lock(), mtx_trylock(), mtx_timedlock()
  */
-int thrd_create(thrd_t *th, thrd_start_t func, void *arg) {
-  switch (pthread_create(th, 0, (void *(*)(void *))func, arg)) {
-    case 0:
-      return thrd_success;
-    case EAGAIN:
-      return thrd_nomem;
-    default:
-      return thrd_error;
+int mtx_unlock(mtx_t *mtx) {
+  uint64_t word = atomic_load_explicit(&mtx->_word, memory_order_relaxed);
+  if (!(MUTEX_TYPE(word) & PTHREAD_MUTEX_RECURSIVE)) {
+    nsync_mu_unlock((nsync_mu *)mtx);
+    return thrd_success;
   }
+  return mtx_unlock_recursive(mtx, word);
 }

@@ -115,12 +115,17 @@ errno_t nsync_mu_semaphore_p_with_deadline_sem (nsync_semaphore *s, int clock,
 	errno_t result;
 	struct sem *f = (struct sem *) s;
 
+	if (!(0 <= abs_deadline.tv_nsec && abs_deadline.tv_nsec < 1000000000))
+		return EINVAL;
+
 	// convert monotonic back to realtime just for netbsd
 	if (clock && nsync_time_cmp (abs_deadline, nsync_time_no_deadline)) {
 		struct timespec now, delta;
 		if (clock_gettime (clock, &now))
 			return EINVAL;
-		delta = timespec_subz (abs_deadline, now);
+		if (timespec_cmp (abs_deadline, now) < 0)
+			return ETIMEDOUT;
+		delta = timespec_sub (abs_deadline, now);
 		clock_gettime (CLOCK_REALTIME, &now);
 		abs_deadline = timespec_add (now, delta);
 	}
@@ -139,8 +144,7 @@ errno_t nsync_mu_semaphore_p_with_deadline_sem (nsync_semaphore *s, int clock,
 	} else {
 		result = errno;
 		errno = e;
-		unassert (result == EINVAL ||
-			  result == ETIMEDOUT ||
+		unassert (result == ETIMEDOUT ||
 			  result == ECANCELED);
 	}
 	return result;

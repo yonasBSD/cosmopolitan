@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,53 +16,34 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/errno.h"
-#include "libc/thread/thread.h"
+#include "libc/assert.h"
+#include "libc/intrin/atomic.h"
+#include "libc/str/str.h"
+#include "libc/thread/lock.h"
 #include "libc/thread/threads.h"
 
 /**
- * Creates new thread.
+ * Destroys condition variable.
  *
- * The new thread begins by calling `func(arg)`. Unlike a pthread start
- * routine, which returns `void *`, a C11 thread function returns `int`;
- * that value becomes the thread's result code, retrievable via
- * thrd_join(), e.g.
+ * This releases any resources associated with `cnd`. It's only safe to
+ * call once no threads are blocked on the condition variable and no
+ * threads will touch it again. Destroying a condition variable that
+ * still has waiters is undefined behavior. The usual discipline is to
+ * first broadcast, join or otherwise confirm all waiters have left.
  *
- *     int worker(void *arg) {
- *       return 42;
- *     }
- *     thrd_t th;
- *     if (thrd_create(&th, worker, 0) != thrd_success)
- *       abort();
- *     int res;
- *     thrd_join(th, &res);  // res == 42
+ * After destruction `cnd` is uninitialized and must not be used until
+ * passed to cnd_init() again. There is no harm in never calling this,
+ * since a `cnd_t` owns no kernel resource of its own.
  *
- * The thread runs until `func` returns, thrd_exit() is called, or the
- * process exits. Each created thread must eventually be passed to
- * either thrd_join() or thrd_detach() exactly once, otherwise its
- * resources leak until exit.
+ * This API is part of the C11 standard and behaves like
+ * pthread_cond_destroy().
  *
- * This is created with cosmopolitan's default thread attributes; for
- * control over stack size, scheduling, etc. use pthread_create(), with
- * which this is otherwise interchangeable (a `thrd_t` is a
- * `pthread_t`).
- *
- * This API is part of the C11 standard.
- *
- * @param thr is output parameter for the new thread's handle
- * @param func is start routine, whose `int` return is thread result
- * @param arg is an opaque value passed through to `func`
- * @return `thrd_success` on success, `thrd_nomem` if memory was
- *     exhausted or we ran out of processes, otherwise `thrd_error`
- * @see thrd_join(), thrd_detach(), thrd_exit(), pthread_create()
+ * @param cnd must have been initialized by cnd_init() and have no waiters
+ * @see cnd_init()
  */
-int thrd_create(thrd_t *th, thrd_start_t func, void *arg) {
-  switch (pthread_create(th, 0, (void *(*)(void *))func, arg)) {
-    case 0:
-      return thrd_success;
-    case EAGAIN:
-      return thrd_nomem;
-    default:
-      return thrd_error;
-  }
+void cnd_destroy(cnd_t *cnd) {
+  unassert(cnd->_nsync == 0);
+  unassert(cnd->_waiters == 0);
+  atomic_store_explicit(&cnd->_nsync, -1, memory_order_relaxed);
+  cnd->_waiters = 0;
 }

@@ -232,7 +232,7 @@ static int cosmo_futex_fix_timeout (struct timespec *memory, int clock,
 			return -EINVAL;
 		if (timespec_cmp (*abstime, now) < 0)
 			return -ETIMEDOUT;
-		*memory = timespec_subz (*abstime, now);
+		*memory = timespec_sub (*abstime, now);
 		*result = memory;
 		return 0;
 	}
