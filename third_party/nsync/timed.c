@@ -221,16 +221,14 @@ dontinline static errno_t nsync_mu_clocklock_slow (nsync_mu *mu, waiter *w, uint
 				if (sem_outcome == 0) {
 					sem_outcome = nsync_mu_semaphore_p_with_deadline
 						(&w->sem, clock, abs_deadline);
-					unassert (sem_outcome == 0 ||
-						  sem_outcome == ETIMEDOUT);
-					if (sem_outcome == ETIMEDOUT &&
+					if (sem_outcome != 0 && /* ETIMEDOUT or EINVAL */
 					    ATM_LOAD (&w->nw.waiting) != 0) {
 						/* Timed out with no wakeup.  Back ourselves
 						   out of the waiter queue; on success we did
 						   not acquire *mu, so report the timeout.  */
 						if (mu_remove_self_after_timeout (
 							    mu, l_type, w, remove_count))
-							result = ETIMEDOUT;
+							result = sem_outcome;
 					}
 				}
 				if (ATM_LOAD (&w->nw.waiting) != 0) {

@@ -139,7 +139,8 @@ errno_t nsync_mu_semaphore_p_with_deadline_sem (nsync_semaphore *s, int clock,
 	} else {
 		result = errno;
 		errno = e;
-		unassert (result == ETIMEDOUT ||
+		unassert (result == EINVAL ||
+			  result == ETIMEDOUT ||
 			  result == ECANCELED);
 	}
 	return result;

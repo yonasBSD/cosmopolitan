@@ -221,6 +221,8 @@ static int cosmo_futex_fix_timeout (struct timespec *memory, int clock,
 	if (!abstime) {
 		*result = 0;
 		return 0;
+	} else if (!(0 <= abstime->tv_nsec && abstime->tv_nsec < 1000000000)) {
+		return -EINVAL;
 	} else if (!g_cosmo_futex.timeout_is_relative) {
 		*memory = *abstime;
 		*result = memory;
