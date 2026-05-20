@@ -228,6 +228,8 @@ static int cosmo_futex_fix_timeout (struct timespec *memory, int clock,
 	} else {
 		if (clock_gettime (clock, &now))
 			return -EINVAL;
+		if (timespec_cmp (*abstime, now) < 0)
+			return -ETIMEDOUT;
 		*memory = timespec_subz (*abstime, now);
 		*result = memory;
 		return 0;
@@ -269,11 +271,6 @@ int cosmo_futex_wait (atomic_int *w, int expect, char pshare,
 	if (clock == CLOCK_REALTIME ||
 	    clock == CLOCK_REALTIME_COARSE)
 		op |= g_cosmo_futex.FUTEX_CLOCK_REALTIME_;
-
-	if (abstime && timespec_cmp (*abstime, timespec_zero) <= 0) {
-		rc = -ETIMEDOUT;
-		goto Finished;
-	}
 
 	if (atomic_load_explicit (w, memory_order_acquire) != expect) {
 		rc = -EAGAIN;
