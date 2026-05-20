@@ -18,9 +18,6 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <time.h>
-#include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/str/str.h"
 
 // signals delivered to a thread parked in pthread_cond_wait must not crash a
 // semaphore-based backend, and must not be mistaken for a real notification:
@@ -39,13 +36,9 @@ static void on_signal(int sig) {
 static void *waiter(void *arg) {
   if (pthread_mutex_lock(&mu))
     exit(20);
-  while (!ready) {
-    errno_t err;
-    if ((err = pthread_cond_wait(&cv, &mu))) {
-      kprintf("oh no %s\n", strerror(err));
+  while (!ready)
+    if (pthread_cond_wait(&cv, &mu))
       exit(21);
-    }
-  }
   atomic_store_explicit(&proceeded, 1, memory_order_release);
   if (pthread_mutex_unlock(&mu))
     exit(22);
