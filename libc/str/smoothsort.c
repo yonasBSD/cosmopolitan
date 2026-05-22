@@ -102,10 +102,6 @@ static void SmoothSort_cycle(struct SmoothSort *s, size_t width, int n) {
   switch (width) {
     CYCLE_CASE(4)
     CYCLE_CASE(8)
-    CYCLE_CASE(16)
-    CYCLE_CASE(32)
-    CYCLE_CASE(48)
-    CYCLE_CASE(64)
     default:
       s->ar[n] = s->tmp;
       while (width) {
@@ -246,11 +242,10 @@ static void SmoothSort(struct SmoothSort *s, void *base, size_t nel,
  * @param width is the size of each item
  * @param cmp is a callback returning <0, 0, or >0
  * @param arg will optionally be passed as the third argument to cmp
- * @see smoothsort()
- * @see qsort()
+ * @asyncsignalsafe
  */
-void smoothsort_r(void *base, size_t count, size_t width, cmpfun cmp,
-                  void *arg) {
+void cosmo_smoothsort_r(void *base, size_t count, size_t width, cmpfun cmp,
+                        void *arg) {
   struct SmoothSort s;
   SmoothSort(&s, base, count, width, cmp, arg);
 }
@@ -258,30 +253,15 @@ void smoothsort_r(void *base, size_t count, size_t width, cmpfun cmp,
 /**
  * Sorts array.
  *
- * This is the function that Musl Libc uses for its qsort() function.
- * It's usually slower than our introsort function, but is still better
- * sometimes. For starters, it's very tiny. If you link cosmopolitan
- * qsort() then it'll schlep malloc(), heapsort(), and libunwind into
- * your binary. This sorting function doesn't depend on any of them.
- * Smoothsort is also fast on nearly-sorted inputs, similar to insertion
- * sort, except smoothsort guarantees a linearithmic worst case.
- *
- * This code has been adapted from Musl to have fast paths for widths 4,
- * 8, 16, 32, or 64. If your width is 4 or 8 and it's a signed integer
- * array, then vqsort or radix sort or _longsort() will be faster. If
- * your array holds a struct whose size matches those other widths, then
- * smoothsort could be a very good choice for you.
- *
  * @param base points to an array to sort in-place
  * @param count is the item count
  * @param width is the size of each item
  * @param cmp is a callback returning <0, 0, or >0 which must impose a
  *     strict weak ordering and behave as a pure function of its args
- * @see smoothsort_r()
- * @see qsort()
+ * @asyncsignalsafe
  */
-void smoothsort(void *base, size_t count, size_t width,
-                int cmp(const void *, const void *)) {
+void cosmo_smoothsort(void *base, size_t count, size_t width,
+                      int cmp(const void *, const void *)) {
   struct SmoothSort s;
   SmoothSort(&s, base, count, width, (cmpfun)cmp, 0);
 }

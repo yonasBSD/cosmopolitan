@@ -28,6 +28,7 @@
 │ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF       │
 │ SUCH DAMAGE.                                                                 │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/macros.h"
 #include "libc/mem/alg.h"
@@ -47,7 +48,7 @@ __static_yoink("openbsd_sorting_notice");
 //    platforms instead of swapping them as byte-aligned.
 //
 // 3. It uses David Musser's introsort algorithm to fall back to
-//    heapsort(3) when the recursion depth reaches 2*lg(n + 1). This
+//    smoothsort(3) when the recursion depth reaches 2*lg(n + 1). This
 //    avoids quicksort's quadratic behavior for pathological input
 //    without appreciably changing the average run time.
 //
@@ -144,8 +145,8 @@ loop:	if (n < 7) {
 		return;
 	}
 	if (maxdepth == 0) {
-		if (heapsort_r(a, n, es, CMPARG) == 0)
-			return;
+		cosmo_smoothsort_r(a, n, es, CMPARG);
+		return;
 	}
 	maxdepth--;
 	pm = a + (n / 2) * es;
@@ -228,7 +229,6 @@ loop:	if (n < 7) {
  * @param es is item width
  * @param cmp is a callback returning <0, 0, or >0
  * @param arg is passed to callback
- * @see qsort()
  */
 void
 qsort_r(void *a, size_t n, size_t es,
@@ -236,11 +236,6 @@ qsort_r(void *a, size_t n, size_t es,
 {
 	size_t i, maxdepth = 0;
 	int swaptype;
-
-	/* smoothsort is slower than quicksort but it's secure, and
-	   it doesn't schlep in heapsort, malloc, and libunwind. */
-	if (IsTiny())
-		return smoothsort_r(a, n, es, cmp, arg);
 
 	/* Approximate 2*ceil(lg(n + 1)) */
 	for (i = n; i > 0; i >>= 1)
@@ -261,25 +256,18 @@ qsort_r(void *a, size_t n, size_t es,
  * Sorts array.
  *
  * This is your go-to general-purpose sorting algorithm. It uses
- * introsort. That means it's just quicksort, except if the input is
- * exhibiting quadratic behavior, then it switches to heapsort. Since
- * heapsort needs malloc(), this function isn't safe to call from signal
- * handlers. In the event that malloc fails, then this function will
- * simply just keep doing quicksort. Therefore if you're sorting
- * untrusted data from a security constrained environment that doesn't
- * have access to mmap() (e.g. pledge()) then you need to be prepared
- * for sorting taking a long time (see setrlimit() with RLIMIT_CPU), or
- * you can use smoothsort() instead, which will likely go slower.
+ * quicksort and switches to smoothsort on quadratic data patterns,
+ * thereby guaranteeing a linearithmic worst case. This is the best
+ * tradeoff for everyone. Quicksort is the fastest and runs most of the
+ * time. Unlike heapsort (used by introsort) we don't need to depend on
+ * malloc. Thus we ensure tiny embeddable high-performance sorting.
  *
  * @param a is base of array
  * @param n is item count
  * @param es is item width
  * @param cmp is a callback returning <0, 0, or >0 which must impose a
  *     strict weak ordering and behave as a pure function of its args
- * @see mergesort()
- * @see heapsort()
- * @see qsort_r()
- * @see djbsort()
+ * @asyncsignalsafe
  */
 void
 qsort(void *a, size_t n, size_t es, int (*cmp)(const void *, const void *))

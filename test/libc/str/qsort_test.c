@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/bsdstdlib.h"
+#include "libc/cosmo.h"
 #include "libc/macros.h"
 #include "libc/mem/alg.h"
 #include "libc/mem/gc.h"
@@ -65,7 +66,7 @@ bool IsStableSort(void sort(void *, size_t, size_t,
 
 TEST(sort, stability) {
   ASSERT_FALSE(IsStableSort(qsort));
-  ASSERT_FALSE(IsStableSort(smoothsort));
+  ASSERT_FALSE(IsStableSort(cosmo_smoothsort));
   ASSERT_FALSE(IsStableSort((void *)qsort_r));
   ASSERT_FALSE(IsStableSort((void *)heapsort));
   ASSERT_TRUE(IsStableSort((void *)mergesort));
@@ -175,7 +176,7 @@ TEST(qsort, equivalence_random) {
   mergesort(c, n, sizeof(long), CompareLong);
   ASSERT_EQ(0, memcmp(b, c, n * sizeof(long)));
   memcpy(c, a, n * sizeof(long));
-  smoothsort(c, n, sizeof(long), CompareLong);
+  cosmo_smoothsort(c, n, sizeof(long), CompareLong);
   ASSERT_EQ(0, memcmp(b, c, n * sizeof(long)));
   memcpy(c, a, n * sizeof(long));
   _longsort(c, n);
@@ -199,7 +200,7 @@ TEST(qsort, equivalence_reverse) {
   mergesort(c, n, sizeof(long), CompareLong);
   ASSERT_EQ(0, memcmp(b, c, n * sizeof(long)));
   memcpy(c, a, n * sizeof(long));
-  smoothsort(c, n, sizeof(long), CompareLong);
+  cosmo_smoothsort(c, n, sizeof(long), CompareLong);
   ASSERT_EQ(0, memcmp(b, c, n * sizeof(long)));
   memcpy(c, a, n * sizeof(long));
   _longsort(c, n);
@@ -222,7 +223,7 @@ TEST(qsort, int40_equivalence_random) {
   heapsort(c, n, sizeof(struct Int40), CompareInt40);
   ASSERT_EQ(0, memcmp(b, c, n * sizeof(struct Int40)));
   memcpy(c, a, n * sizeof(struct Int40));
-  smoothsort(c, n, sizeof(struct Int40), CompareInt40);
+  cosmo_smoothsort(c, n, sizeof(struct Int40), CompareInt40);
   ASSERT_EQ(0, memcmp(b, c, n * sizeof(struct Int40)));
   for (i = 1; i < n; ++i)
     ASSERT_LE(LoadInt40(&b[i - 1]), LoadInt40(&b[i]));
@@ -262,7 +263,7 @@ BENCH(qsort, bench) {
   EZBENCH2("mergesort nearly", memcpy(p2, p1, n * sizeof(long)),
            mergesort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("smoothsort nearly", memcpy(p2, p1, n * sizeof(long)),
-           smoothsort(p2, n, sizeof(long), CompareLong));
+           cosmo_smoothsort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("_longsort nearly", memcpy(p2, p1, n * sizeof(long)),
            _longsort(p2, n));
 
@@ -278,7 +279,7 @@ BENCH(qsort, bench) {
   EZBENCH2("mergesort reverse", memcpy(p2, p1, n * sizeof(long)),
            mergesort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("smoothsort reverse", memcpy(p2, p1, n * sizeof(long)),
-           smoothsort(p2, n, sizeof(long), CompareLong));
+           cosmo_smoothsort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("_longsort reverse", memcpy(p2, p1, n * sizeof(long)),
            _longsort(p2, n));
 
@@ -293,7 +294,7 @@ BENCH(qsort, bench) {
   EZBENCH2("mergesort random", memcpy(p2, p1, n * sizeof(long)),
            mergesort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("smoothsort random", memcpy(p2, p1, n * sizeof(long)),
-           smoothsort(p2, n, sizeof(long), CompareLong));
+           cosmo_smoothsort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("_longsort random", memcpy(p2, p1, n * sizeof(long)),
            _longsort(p2, n));
 
@@ -311,7 +312,7 @@ BENCH(qsort, bench) {
   EZBENCH2("mergesort 2n", memcpy(p2, p1, n * sizeof(long)),
            mergesort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("smoothsort 2n", memcpy(p2, p1, n * sizeof(long)),
-           smoothsort(p2, n, sizeof(long), CompareLong));
+           cosmo_smoothsort(p2, n, sizeof(long), CompareLong));
   EZBENCH2("_longsort 2n", memcpy(p2, p1, n * sizeof(long)), _longsort(p2, n));
 }
 
@@ -334,7 +335,7 @@ BENCH(qsort, bench_int40) {
   EZBENCH2("mergesort40 nearly", memcpy(p2, p1, n * sizeof(struct Int40)),
            mergesort(p2, n, sizeof(struct Int40), CompareInt40));
   EZBENCH2("smoothsort40 nearly", memcpy(p2, p1, n * sizeof(struct Int40)),
-           smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
+           cosmo_smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
 
   printf("\n");
   for (i = 0; i < n; ++i)
@@ -346,7 +347,7 @@ BENCH(qsort, bench_int40) {
   EZBENCH2("mergesort40 reverse", memcpy(p2, p1, n * sizeof(struct Int40)),
            mergesort(p2, n, sizeof(struct Int40), CompareInt40));
   EZBENCH2("smoothsort40 reverse", memcpy(p2, p1, n * sizeof(struct Int40)),
-           smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
+           cosmo_smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
 
   printf("\n");
   arc4random_buf(p1, n * sizeof(struct Int40));
@@ -357,5 +358,5 @@ BENCH(qsort, bench_int40) {
   EZBENCH2("mergesort40 random", memcpy(p2, p1, n * sizeof(struct Int40)),
            mergesort(p2, n, sizeof(struct Int40), CompareInt40));
   EZBENCH2("smoothsort40 random", memcpy(p2, p1, n * sizeof(struct Int40)),
-           smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
+           cosmo_smoothsort(p2, n, sizeof(struct Int40), CompareInt40));
 }
